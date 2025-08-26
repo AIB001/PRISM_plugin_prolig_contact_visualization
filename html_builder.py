@@ -238,29 +238,43 @@ class HTMLBuilder:
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
         .color-bar {
-            display: flex; 
-            align-items: center; 
-            gap: 15px; 
-            margin: 20px 0; 
-            padding: 15px;
+            margin: 20px 0;
+            padding: 20px;
             background: white;
-            border-radius: 10px;
+            border-radius: 12px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         }
+        .color-gradient-container {
+            position: relative;
+            width: 100%;
+            margin: 15px 0 25px 0;  /* 底部增加空间 */
+        }
         .color-gradient {
-            height: 24px; 
-            width: 200px; 
-            background: linear-gradient(to right, #95a5a6 0%, #3498db 35%, #9b59b6 65%, #e74c3c 100%);
-            border-radius: 12px;
-            box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+            height: 40px;
+            width: 100%;
+            background: linear-gradient(to right, 
+                #95a5a6 0%, 
+                #3498db 25%, 
+                #9b59b6 50%, 
+                #e74c3c 75%, 
+                #c0392b 100%);
+            border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15), inset 0 2px 4px rgba(255,255,255,0.3);
         }
         .color-labels {
-            display: flex; 
-            justify-content: space-between; 
-            width: 200px; 
-            font-size: 11px; 
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-top: 8px;
+            font-size: 12px;
             color: #7F8C8D;
-            font-weight: 500;
+            font-weight: 600;
+        }
+        .color-bar-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2C3E50;
+            margin-bottom: 10px;
         }
         .tooltip {
             position: absolute; 
@@ -328,7 +342,7 @@ class HTMLBuilder:
             <button class="control-btn" onclick="toggleDistanceLock()" id="distanceLockBtn">🔒 Distance Locked</button>
             <button class="control-btn" onclick="toggle3DMode()" id="mode3DBtn">2D Mode</button>
             <button class="control-btn secondary" onclick="toggleConnections()" id="connectBtn">Hide Connections</button>
-            <button class="control-btn secondary" onclick="toggleHydrogens()" id="hydrogenBtn">Hide H atoms</button>
+            <button class="control-btn secondary" onclick="toggleHydrogens()" id="hydrogenBtn">Hide H atoms</button> 
             <div class="export-controls" style="display: inline-flex; gap: 10px; align-items: center;">
                 <select id="exportQuality" class="control-btn secondary" style="padding: 10px;">
                     <option value="1">Standard (1x)</option>
@@ -355,15 +369,18 @@ class HTMLBuilder:
             </div>
             
             <div class="color-bar">
-                <span style="font-weight: bold;">Contact Frequency:</span>
-                <div class="color-gradient"></div>
+                <div class="color-bar-title">Contact Frequency</div>
+                <div class="color-gradient-container">
+                    <div class="color-gradient"></div>
+                </div>
                 <div class="color-labels">
                     <span>0%</span>
+                    <span>25%</span>
                     <span>50%</span>
+                    <span>75%</span>
                     <span>100%</span>
                 </div>
             </div>
-            
             <div class="legend">
                 <div class="legend-item"><div class="legend-color" style="background: #27ae60;"></div><span>Carbon atoms</span></div>
                 <div class="legend-item"><div class="legend-color" style="background: #e91e63;"></div><span>Oxygen atoms</span></div>
