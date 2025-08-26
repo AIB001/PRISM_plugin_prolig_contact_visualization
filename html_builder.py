@@ -293,6 +293,7 @@ class HTMLBuilder:
             border-radius: 10px;
         }
         .export-controls select, .export-controls input {
+            color: #000000; 
             padding: 10px;
             border: 1px solid rgba(102, 126, 234, 0.3);
             border-radius: 8px;
@@ -327,6 +328,7 @@ class HTMLBuilder:
             <button class="control-btn" onclick="toggleDistanceLock()" id="distanceLockBtn">🔒 Distance Locked</button>
             <button class="control-btn" onclick="toggle3DMode()" id="mode3DBtn">2D Mode</button>
             <button class="control-btn secondary" onclick="toggleConnections()" id="connectBtn">Hide Connections</button>
+            <button class="control-btn secondary" onclick="toggleHydrogens()" id="hydrogenBtn">Hide H atoms</button>
             <div class="export-controls" style="display: inline-flex; gap: 10px; align-items: center;">
                 <select id="exportQuality" class="control-btn secondary" style="padding: 10px;">
                     <option value="1">Standard (1x)</option>

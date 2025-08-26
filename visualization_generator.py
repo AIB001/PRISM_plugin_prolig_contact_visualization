@@ -133,7 +133,7 @@ class VisualizationGenerator:
         return ligand_data
     
     def generate_contact_data(self, contact_results, ligand_data, max_contacts=20):
-        """Generate contact data for HTML with proper alignment"""
+        """Generate contact data for HTML with proper alignment and TOP3 marking"""
         residue_prop = contact_results['residue_proportions']
         residue_distances = contact_results.get('residue_avg_distances', {})
         residue_best_ligand = contact_results.get('residue_best_ligand_atoms', {})
@@ -141,6 +141,15 @@ class VisualizationGenerator:
         # Sort residues by contact proportion
         sorted_residues = sorted(residue_prop.items(), key=lambda x: x[1], reverse=True)
         top_residues = sorted_residues[:max_contacts]
+        
+        # Identify global TOP3 residues based on frequency
+        top3_residue_ids = set()
+        if len(sorted_residues) >= 1:
+            top3_residue_ids.add(sorted_residues[0][0])  # 1st
+        if len(sorted_residues) >= 2:
+            top3_residue_ids.add(sorted_residues[1][0])  # 2nd
+        if len(sorted_residues) >= 3:
+            top3_residue_ids.add(sorted_residues[2][0])  # 3rd
         
         contacts = []
         
@@ -171,6 +180,9 @@ class VisualizationGenerator:
             sqrt_dist = np.sqrt((clamped_dist - min_dist_nm) / (max_dist_nm - min_dist_nm))
             pixel_distance = 250 + sqrt_dist * 150
             
+            # Check if this residue is in TOP3
+            is_top3 = residue_id in top3_residue_ids
+            
             contacts.append({
                 'id': str(residue_id.replace(' ', '_')),
                 'frequency': float(min(proportion, 1.0)),
@@ -178,7 +190,8 @@ class VisualizationGenerator:
                 'ligandAtom': best_ligand_atom_id,
                 'residue': str(residue_id),
                 'avgDistance': float(avg_distance_nm),
-                'pixelDistance': float(pixel_distance)
+                'pixelDistance': float(pixel_distance),
+                'isTop3': is_top3  # Mark if this is a TOP3 contact
             })
         
         return contacts

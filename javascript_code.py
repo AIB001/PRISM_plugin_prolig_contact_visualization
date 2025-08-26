@@ -30,6 +30,7 @@ def get_contact_map_class_part1():
                     this.ctx = this.canvas.getContext('2d');
                     this.tooltip = document.getElementById('tooltip');
                     this.showConnections = true;
+                    this.showHydrogens = true;  
                     this.distanceLocked = true;
                     this.is3DMode = false;
                     this.isDragging = false;
@@ -131,21 +132,23 @@ def get_contact_map_class_part1():
                             baseAngle = 0;
                         }
                         
-                        // For multiple residues on same atom, create small angular offset
-                        const spreadAngle = Math.PI / 8; // 22.5 degrees total spread
+                        // For multiple residues on same atom, create larger angular offset for TOP3
+                        const spreadAngle = Math.PI / 6; // 30 degrees total spread
                         
                         contactGroup.forEach((contact, groupIdx) => {
                             // Calculate offset angle for multiple contacts
                             let angle = baseAngle;
                             if (contactGroup.length > 1) {
-                                // Distribute contacts around the base angle
-                                const offset = (groupIdx - (contactGroup.length - 1) / 2) * (spreadAngle / Math.max(1, contactGroup.length - 1));
+                                // Give TOP3 contacts more space
+                                const spreadFactor = contact.isTop3 ? 1.5 : 1.0;
+                                const offset = (groupIdx - (contactGroup.length - 1) / 2) * 
+                                             (spreadAngle * spreadFactor / Math.max(1, contactGroup.length - 1));
                                 angle = baseAngle + offset;
                             }
                             
-                            // Shorten initial distance by 20%
+                            // Adjust distance based on whether it's TOP3
                             const baseDistance = contact.pixelDistance || 250;
-                            const distance = baseDistance * 0.8;
+                            const distance = contact.isTop3 ? baseDistance * 0.7 : baseDistance * 0.5;
                             
                             // Calculate position along the extension line
                             const dirX = Math.cos(angle);
@@ -171,7 +174,8 @@ def get_contact_map_class_part1():
                         // Fallback positioning
                         contactGroup.forEach((contact, idx) => {
                             const angle = (this.contacts.length * 2 * Math.PI / CONTACTS.length) - Math.PI/2;
-                            const distance = (contact.pixelDistance || 250) * 0.8;
+                            const baseDistance = contact.pixelDistance || 250;
+                            const distance = contact.isTop3 ? baseDistance * 0.7 : baseDistance * 0.5;
                             const x = this.centerX + Math.cos(angle) * distance;
                             const y = this.centerY + Math.sin(angle) * distance;
                             
@@ -359,9 +363,11 @@ def get_contact_map_class_part2():
             }
             
             findElementAt(x, y) {
+                // Check contacts first (smaller hit areas for TOP3)
                 for (let contact of this.contacts) {
+                    const hitRadius = contact.isTop3 ? 50 : 40;
                     const dist = Math.sqrt((x - contact.x) ** 2 + (y - contact.y) ** 2);
-                    if (dist < 40) return contact;
+                    if (dist < hitRadius) return contact;
                 }
                 for (let atom of this.ligandAtoms) {
                     const dist = Math.sqrt((x - atom.x) ** 2 + (y - atom.y) ** 2);
@@ -385,7 +391,8 @@ def get_contact_map_class_part2():
                 let content = '';
                 if (element.frequency !== undefined) {
                     const distanceText = element.avgDistance ? ` | Distance: ${element.avgDistance.toFixed(2)}nm` : '';
-                    content = `${element.residue}<br>Frequency: ${(element.frequency * 100).toFixed(1)}%${distanceText}`;
+                    const top3Text = element.isTop3 ? ' <span style="color: gold;">★ TOP 3</span>' : '';
+                    content = `${element.residue}${top3Text}<br>Frequency: ${(element.frequency * 100).toFixed(1)}%${distanceText}`;
                 } else {
                     content = `Ligand Atom: ${element.element}${element.id.substring(1)}<br>Contacts: ${element.contacts || 0}`;
                 }
@@ -644,25 +651,42 @@ def get_drawing_methods():
                     if (!ligandAtom) return;
                     
                     const color = this.getFrequencyColor(contact.frequency);
-                    const width = 2 + contact.frequency * 3;
                     
                     let targetX = contact.x;
                     let targetY = contact.y;
                     
-                    if (index < 3) {
+                    // Adjust target for TOP3 contacts
+                    if (contact.isTop3) {
                         if (contact.contactAtomX !== undefined && contact.contactAtomY !== undefined) {
                             targetX = contact.contactAtomX;
                             targetY = contact.contactAtomY;
                         } else {
                             const angle = contact.angle || Math.atan2(ligandAtom.y - contact.y, ligandAtom.x - contact.x);
-                            targetX = contact.x + Math.cos(angle) * 30;
-                            targetY = contact.y + Math.sin(angle) * 30;
+                            targetX = contact.x + Math.cos(angle) * 25;  // Reduced from 30
+                            targetY = contact.y + Math.sin(angle) * 25;
                         }
                     }
                     
+                    // Draw enhanced connections for TOP3
+                    if (contact.isTop3) {
+                        // Draw glow effect
+                        this.ctx.save();
+                        this.ctx.shadowBlur = 15;
+                        this.ctx.shadowColor = color;
+                        this.ctx.strokeStyle = color;
+                        this.ctx.lineWidth = 4 + contact.frequency * 4;
+                        this.ctx.globalAlpha = 0.3;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(ligandAtom.x, ligandAtom.y);
+                        this.ctx.lineTo(targetX, targetY);
+                        this.ctx.stroke();
+                        this.ctx.restore();
+                    }
+                    
+                    // Draw main connection
                     this.ctx.strokeStyle = color;
-                    this.ctx.lineWidth = width;
-                    this.ctx.globalAlpha = 0.6 + contact.frequency * 0.4;
+                    this.ctx.lineWidth = contact.isTop3 ? (3 + contact.frequency * 3) : (1.5 + contact.frequency * 2);
+                    this.ctx.globalAlpha = contact.isTop3 ? 0.8 : (0.5 + contact.frequency * 0.3);
                     this.ctx.beginPath();
                     this.ctx.moveTo(ligandAtom.x, ligandAtom.y);
                     this.ctx.lineTo(targetX, targetY);
@@ -674,10 +698,17 @@ def get_drawing_methods():
             drawLigand() {
                 this.ctx.strokeStyle = '#34495e';
                 this.ctx.lineWidth = 3;
+                
+                // 绘制键
                 this.ligandBonds.forEach(([id1, id2]) => {
                     const atom1 = this.ligandAtoms.find(a => a.id === id1);
                     const atom2 = this.ligandAtoms.find(a => a.id === id2);
                     if (atom1 && atom2) {
+                        // 如果隐藏氢原子模式开启，跳过涉及氢的键
+                        if (!this.showHydrogens && (atom1.element === 'H' || atom2.element === 'H')) {
+                            return;
+                        }
+                        
                         if (atom1.element === 'H' || atom2.element === 'H') {
                             this.ctx.lineWidth = 1.5;
                         } else {
@@ -690,7 +721,13 @@ def get_drawing_methods():
                     }
                 });
                 
+                // 绘制原子
                 this.ligandAtoms.forEach(atom => {
+                    // 如果隐藏氢原子模式开启，跳过氢原子
+                    if (!this.showHydrogens && atom.element === 'H') {
+                        return;
+                    }
+                    
                     const color = this.getAtomColor(atom.element);
                     
                     this.ctx.fillStyle = color;
@@ -742,17 +779,19 @@ def get_drawing_methods():
                 const dy = ligandAtom.y - y;
                 const angle = Math.atan2(dy, dx);
                 
-                if (index <= 3) {
-                    this.drawOrientedAAStructure(x, y, residueType, contact.residue, color, index, angle);
+                // Use contact.isTop3 instead of index
+                if (contact.isTop3) {
+                    this.drawOrientedAAStructure(x, y, residueType, contact.residue, color, index, angle, contact.frequency);
                 } else {
                     this.drawSimpleLabel(x, y, residueType, contact.residue, color, index);
                 }
             }
             
-            drawOrientedAAStructure(x, y, residueType, residueName, color, index, angle) {
+            drawOrientedAAStructure(x, y, residueType, residueName, color, index, angle, frequency) {
+                // Calculate contact atom position (closer to structure)
                 const contactAtomPos = {
-                    x: x + Math.cos(angle) * 30,
-                    y: y + Math.sin(angle) * 30
+                    x: x + Math.cos(angle) * 25,  // Reduced from 30
+                    y: y + Math.sin(angle) * 25
                 };
                 
                 const contactIdx = this.contacts.findIndex(c => c.residue === residueName);
@@ -765,16 +804,18 @@ def get_drawing_methods():
                 this.ctx.translate(x, y);
                 this.ctx.rotate(angle);
                 
+                // Smaller backbone structure
                 const backbone = [
-                    {name: 'N', x: 30, y: 0, color: '#4169E1', radius: 14},
-                    {name: 'Ca', x: 10, y: 0, color: '#808080', radius: 14},
-                    {name: 'C', x: -10, y: 0, color: '#808080', radius: 14},
-                    {name: 'O1', x: -30, y: -10, color: '#DC143C', radius: 12},
-                    {name: 'O2', x: -30, y: 10, color: '#DC143C', radius: 12}
+                    {name: 'N', x: 22, y: 0, color: '#4169E1', radius: 11},    // Reduced sizes
+                    {name: 'Ca', x: 7, y: 0, color: '#808080', radius: 11},
+                    {name: 'C', x: -7, y: 0, color: '#808080', radius: 11},
+                    {name: 'O1', x: -22, y: -7, color: '#DC143C', radius: 9},
+                    {name: 'O2', x: -22, y: 7, color: '#DC143C', radius: 9}
                 ];
                 
+                // Draw bonds with thinner lines
                 this.ctx.strokeStyle = '#000000';
-                this.ctx.lineWidth = 5;
+                this.ctx.lineWidth = 4;  // Reduced from 5
                 
                 this.ctx.beginPath();
                 this.ctx.moveTo(backbone[0].x - backbone[0].radius * 0.8, backbone[0].y);
@@ -786,18 +827,32 @@ def get_drawing_methods():
                 this.ctx.lineTo(backbone[2].x + backbone[2].radius * 0.8, backbone[2].y);
                 this.ctx.stroke();
                 
-                this.ctx.lineWidth = 4;
+                this.ctx.lineWidth = 3;  // Reduced from 4
                 this.ctx.beginPath();
-                this.ctx.moveTo(backbone[2].x - backbone[2].radius * 0.7, backbone[2].y - 5);
+                this.ctx.moveTo(backbone[2].x - backbone[2].radius * 0.7, backbone[2].y - 4);
                 this.ctx.lineTo(backbone[3].x + backbone[3].radius * 0.7, backbone[3].y);
                 this.ctx.stroke();
                 
+                // Draw side chain (smaller)
                 this.drawOrientedSideChain(backbone[1].x, backbone[1].y, residueType);
                 
+                // Draw atoms
                 backbone.forEach(atom => {
+                    // Add subtle glow for high frequency contacts
+                    if (frequency > 0.7) {
+                        this.ctx.save();
+                        this.ctx.shadowBlur = 10;
+                        this.ctx.shadowColor = atom.color;
+                        this.ctx.fillStyle = atom.color;
+                        this.ctx.beginPath();
+                        this.ctx.arc(atom.x, atom.y, atom.radius, 0, 2 * Math.PI);
+                        this.ctx.fill();
+                        this.ctx.restore();
+                    }
+                    
                     this.ctx.fillStyle = atom.color;
                     this.ctx.strokeStyle = 'black';
-                    this.ctx.lineWidth = 2;
+                    this.ctx.lineWidth = 1.5;  // Reduced from 2
                     
                     this.ctx.beginPath();
                     this.ctx.arc(atom.x, atom.y, atom.radius, 0, 2 * Math.PI);
@@ -806,7 +861,7 @@ def get_drawing_methods():
                     
                     if (atom.name === 'N' || atom.name.startsWith('O')) {
                         this.ctx.fillStyle = 'white';
-                        this.ctx.font = 'bold 16px Arial';
+                        this.ctx.font = 'bold 13px Arial';  // Reduced from 16px
                         this.ctx.textAlign = 'center';
                         this.ctx.textBaseline = 'middle';
                         const label = atom.name.startsWith('O') ? 'O' : atom.name;
@@ -816,69 +871,84 @@ def get_drawing_methods():
                 
                 this.ctx.restore();
                 
+                // Draw residue name
                 this.ctx.fillStyle = 'darkred';
-                this.ctx.font = 'bold 26px Arial';
+                this.ctx.font = 'bold 20px Arial';  // Reduced from 26px
                 this.ctx.textAlign = 'center';
                 this.ctx.textBaseline = 'bottom';
-                this.ctx.fillText(residueName, x, y - 45);
+                this.ctx.fillText(residueName, x, y - 38);  // Adjusted position
                 
+                // Draw rank badge
                 this.ctx.fillStyle = '#FFD700';
                 this.ctx.strokeStyle = '#000000';
-                this.ctx.lineWidth = 2;
+                this.ctx.lineWidth = 1.5;
                 this.ctx.beginPath();
-                this.ctx.arc(x + 50, y - 30, 18, 0, 2 * Math.PI);
+                this.ctx.arc(x + 40, y - 25, 14, 0, 2 * Math.PI);  // Smaller badge
                 this.ctx.fill();
                 this.ctx.stroke();
                 this.ctx.fillStyle = 'black';
-                this.ctx.font = 'bold 18px Arial';
+                this.ctx.font = 'bold 14px Arial';  // Reduced from 18px
                 this.ctx.textAlign = 'center';
                 this.ctx.textBaseline = 'middle';
-                this.ctx.fillText('#' + index, x + 50, y - 30);
+                // 计算TOP3排名 - 使用residueName参数
+                const top3Contacts = this.contacts.filter(c => c.isTop3).sort((a, b) => b.frequency - a.frequency);
+                const rankIndex = top3Contacts.findIndex(c => c.residue === residueName) + 1;
+                this.ctx.fillText('#' + rankIndex, x + 40, y - 25);
             }
             
             drawOrientedSideChain(x, y, residueType) {
                 this.ctx.strokeStyle = '#000000';
-                this.ctx.lineWidth = 4;
+                this.ctx.lineWidth = 3;  // Reduced from 4
                 
                 if (residueType === 'GLY') {
                     this.ctx.fillStyle = '#808080';
-                    this.ctx.font = 'bold 14px Arial';
+                    this.ctx.font = 'bold 12px Arial';  // Reduced from 14px
                     this.ctx.textAlign = 'center';
-                    this.ctx.fillText('H', x, y + 25);
+                    this.ctx.fillText('H', x, y + 20);  // Adjusted position
                 } else {
                     this.ctx.beginPath();
-                    this.ctx.moveTo(x, y + 14);
-                    this.ctx.lineTo(x, y + 35);
+                    this.ctx.moveTo(x, y + 11);  // Adjusted positions
+                    this.ctx.lineTo(x, y + 28);
                     this.ctx.stroke();
                     
                     this.ctx.fillStyle = '#808080';
                     this.ctx.strokeStyle = 'black';
-                    this.ctx.lineWidth = 2;
+                    this.ctx.lineWidth = 1.5;  // Reduced from 2
                     this.ctx.beginPath();
-                    this.ctx.arc(x, y + 35, 10, 0, 2 * Math.PI);
+                    this.ctx.arc(x, y + 28, 8, 0, 2 * Math.PI);  // Smaller R group
                     this.ctx.fill();
                     this.ctx.stroke();
                     
                     this.ctx.fillStyle = 'white';
-                    this.ctx.font = 'bold 12px Arial';
+                    this.ctx.font = 'bold 10px Arial';  // Reduced from 12px
                     this.ctx.textAlign = 'center';
-                    this.ctx.fillText('R', x, y + 35);
+                    this.ctx.fillText('R', x, y + 28);
                 }
             }
             
             drawSimpleLabel(x, y, residueType, residueName, color, index) {
                 const label = residueName;
-                const radius = 30;
+                const radius = 28;  // Slightly smaller
+                
+                // Add subtle shadow for depth
+                this.ctx.save();
+                this.ctx.shadowBlur = 5;
+                this.ctx.shadowColor = 'rgba(0,0,0,0.2)';
+                this.ctx.shadowOffsetX = 2;
+                this.ctx.shadowOffsetY = 2;
+                
                 this.ctx.fillStyle = 'white';
-                this.ctx.strokeStyle = 'darkblue';
+                this.ctx.strokeStyle = color;  // Use frequency color instead of fixed color
                 this.ctx.lineWidth = 3;
                 this.ctx.beginPath();
                 this.ctx.arc(x, y, radius, 0, 2 * Math.PI);
                 this.ctx.fill();
                 this.ctx.stroke();
                 
+                this.ctx.restore();
+                
                 this.ctx.fillStyle = 'darkblue';
-                this.ctx.font = 'bold 14px Arial';
+                this.ctx.font = 'bold 13px Arial';  // Slightly smaller
                 this.ctx.textAlign = 'center';
                 this.ctx.textBaseline = 'middle';
                 this.ctx.fillText(label, x, y);
@@ -992,6 +1062,11 @@ def get_utility_functions():
             contactMap.showConnections = !contactMap.showConnections; 
             const btn = document.getElementById('connectBtn');
             btn.textContent = contactMap.showConnections ? 'Hide Connections' : 'Show Connections';
+        }
+        function toggleHydrogens() {
+            contactMap.showHydrogens = !contactMap.showHydrogens;
+            const btn = document.getElementById('hydrogenBtn');
+            btn.textContent = contactMap.showHydrogens ? 'Hide H atoms' : 'Show H atoms';
         }
         
         function centerView() { 
